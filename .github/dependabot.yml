@@ -4,6 +4,14 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    groups:
+      # react と react-dom は同じバージョンでないと動かないので、まとめて更新する
+      react:
+        patterns: ['react', 'react-dom', '@types/react', '@types/react-dom']
+    ignore:
+      # next-auth v4 が openid-client v5 を前提にしている（v6 は API が別物）
+      - dependency-name: openid-client
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
