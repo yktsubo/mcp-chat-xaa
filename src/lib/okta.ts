@@ -44,6 +44,7 @@ export function clientCredentials(clientId: string): { client: ClientMetadata; j
 }
 
 const issuers = new Map<string, Promise<Issuer<BaseClient>>>();
+const notAdvertised = new Set<string>();
 
 /** 認可サーバーのメタデータを取得し、その認可サーバー用のクライアントを作る */
 async function clientFor(issuer: string, clientId: string): Promise<BaseClient> {
@@ -69,6 +70,7 @@ export const assertionAudience = (client: BaseClient) => ({
 /** テスト用: 取得済みのメタデータを消す */
 export function clearIssuerCache() {
   issuers.clear();
+  notAdvertised.clear();
 }
 
 /** ログインのトークンを更新する（ID トークンは 1 時間で切れるため） */
@@ -86,7 +88,7 @@ export async function logoutUrl(idToken: string | undefined, postLogoutRedirectU
   });
 }
 
-export type XaaRequest = {
+type XaaRequest = {
   /** MCP サーバーの認可サーバー（Protected Resource Metadata の authorization_servers） */
   issuer: string;
   /**
@@ -105,10 +107,13 @@ export type XaaRequest = {
 export async function exchangeIdToken(idToken: string, { issuer, resource, scope }: XaaRequest) {
   const agentId = process.env.OKTA_AI_AGENT_ID || process.env.OKTA_CLIENT_ID!;
 
-  // 認可サーバーが ID-JAG を受け付けると宣言していない場合は、記録だけ残して続ける（宣言しない実装もあるため）
+  // 認可サーバーが ID-JAG を受け付けると宣言していない場合は、記録だけ残して続ける（Okta など宣言しない実装もあるため、
+  // 認可サーバーごとに 1 回だけ記録する）
   const metadata = (await authorizationServerMetadata(issuer)) as { authorization_grant_profiles_supported?: string[] };
-  const profiles = metadata.authorization_grant_profiles_supported;
-  if (!profiles?.includes(ID_JAG_PROFILE)) log.warn('xaa_profile_not_advertised', { issuer });
+  if (!metadata.authorization_grant_profiles_supported?.includes(ID_JAG_PROFILE) && !notAdvertised.has(issuer)) {
+    notAdvertised.add(issuer);
+    log.warn('xaa_profile_not_advertised', { issuer });
+  }
 
   const org = await clientFor(process.env.OKTA_ISSUER!, agentId);
   const idJag = await org.grant(

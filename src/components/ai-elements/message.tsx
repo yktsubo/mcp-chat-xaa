@@ -1,5 +1,8 @@
 "use client";
 
+// Modified from AI Elements (https://github.com/vercel/ai-elements, Apache License 2.0):
+// removed the math and mermaid Streamdown plugins. See THIRD_PARTY_NOTICES.
+
 import { Button } from "@/components/ui/button";
 import {
   ButtonGroup,

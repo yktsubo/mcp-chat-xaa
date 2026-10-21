@@ -49,6 +49,8 @@ const clientMetadataDocument = await import('../oauth/client-metadata.json/route
 
 const GATEWAY = { name: 'gateway', label: 'Okta Agent Gateway', url: 'https://gw.example.com/mcp' };
 const USER = { id: 'u1', name: 'alice', idToken: 'idt' };
+// コールバックが使う StoredOAuthProvider の代わり（認可サーバーの情報は無い＝iss の確認は SDK に任せる）
+const provider = () => ({ authorizationServerInformation: () => undefined });
 const close = vi.fn(async () => []);
 
 beforeEach(() => {
@@ -111,12 +113,12 @@ describe('GET /api/mcp/connect', () => {
 
 describe('GET /api/mcp/callback', () => {
   it('exchanges the code, then tells the chat window and closes the tab', async () => {
-    const provider = {};
-    load.mockResolvedValue(provider);
+    const stored = provider();
+    load.mockResolvedValue(stored);
     const res = await callback.GET(request('/api/mcp/callback?code=c&state=gateway.s&iss=https%3A%2F%2Fas'));
 
     expect(load).toHaveBeenCalledWith(GATEWAY, 'https://app.example.com', 'u1');
-    expect(auth).toHaveBeenCalledWith(provider, expect.objectContaining({
+    expect(auth).toHaveBeenCalledWith(stored, expect.objectContaining({
       serverUrl: GATEWAY.url,
       authorizationCode: 'c',
       callbackState: 'gateway.s',
@@ -130,7 +132,7 @@ describe('GET /api/mcp/callback', () => {
 
   it('escapes the label in the page', async () => {
     vi.stubEnv('MCP_SERVERS', JSON.stringify([{ name: 'x', label: '<img src=x onerror=alert(1)>', url: 'https://x.example.com/mcp' }]));
-    load.mockResolvedValue({});
+    load.mockResolvedValue(provider());
     const html = await (await callback.GET(request('/api/mcp/callback?code=c&state=x.s'))).text();
     expect(html).toContain('&lt;img src=x onerror=alert(1)&gt; に接続しました');
     expect(html).not.toContain('<img');
@@ -139,13 +141,13 @@ describe('GET /api/mcp/callback', () => {
 
   it('names the server by its ID when it has no label', async () => {
     vi.stubEnv('MCP_SERVERS', JSON.stringify([{ name: 'notion', url: 'https://notion.example.com/mcp' }]));
-    load.mockResolvedValue({});
+    load.mockResolvedValue(provider());
     const res = await callback.GET(request('/api/mcp/callback?code=c&state=notion.s'));
     expect(await res.text()).toContain('notion に接続しました');
   });
 
   it('shows and logs why the exchange failed', async () => {
-    load.mockResolvedValue({});
+    load.mockResolvedValue(provider());
     auth.mockRejectedValue(new Error('The authorization code is invalid or has expired.'));
     const res = await callback.GET(request('/api/mcp/callback?code=c&state=gateway.s'));
     expect(res.status).toBe(500);

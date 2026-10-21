@@ -22,7 +22,7 @@ export function clearDiscoveryCache() {
   cache.clear();
 }
 
-export type ResourceInfo = { resource: string; authorizationServers: string[] };
+type ResourceInfo = { resource: string; authorizationServers: string[] };
 
 /**
  * MCP サーバーの Protected Resource Metadata（RFC 9728）。

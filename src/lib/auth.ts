@@ -89,7 +89,7 @@ const serverOptions: NextAuthOptions = {
   },
 };
 
-export type CurrentUser = { id: string; name: string; idToken?: string };
+type CurrentUser = { id: string; name: string; idToken?: string };
 
 /** ログイン中のユーザー（ID、ユーザー名、XAA に使う ID トークン）。未ログインなら undefined */
 export async function currentUser(): Promise<CurrentUser | undefined> {

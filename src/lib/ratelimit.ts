@@ -5,7 +5,7 @@ import { redisClient } from './store';
 // 上限は CHAT_RATE_LIMIT_PER_MINUTE（既定 10）。Redis が無いローカル開発では制限しない。
 let limiter: Ratelimit | undefined;
 
-export type LimitResult = { success: true } | { success: false; retryAfterSeconds: number };
+type LimitResult = { success: true } | { success: false; retryAfterSeconds: number };
 
 export async function checkChatLimit(user: string): Promise<LimitResult> {
   const redis = redisClient();

@@ -202,6 +202,16 @@ npm run typecheck        # 型チェック
 
 カバレッジの対象は、このアプリのコード（`src/lib`、`src/app`、`src/components/Header.tsx`、`src/instrumentation.ts`）です。`src/components/ui` と `src/components/ai-elements` は shadcn/ui と AI Elements の CLI が生成した部品で、ライブラリとして対象から外しています。
 
+GitHub Actions（`.github/workflows/ci.yml`）で、プッシュとプルリクエストのたびに `npm audit`、型チェック、テスト（カバレッジ付き）、ビルドを実行します。
+
+## ライセンス
+
+MIT License（`LICENSE`）。
+
+### サードパーティのライセンス
+
+`src/components/ai-elements`（AI Elements、Apache License 2.0）と `src/components/ui`・`src/app/shadcn.css`（shadcn/ui、MIT License）は、各プロジェクトのソースコードを取り込んだものです。ライセンス文と変更点は `THIRD_PARTY_NOTICES` にあります。
+
 ## 構成
 
 | パス | 内容 |

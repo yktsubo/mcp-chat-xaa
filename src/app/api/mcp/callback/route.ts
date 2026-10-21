@@ -1,6 +1,7 @@
 import { auth } from '@ai-sdk/mcp';
 import type { NextRequest } from 'next/server';
 import { currentUser } from '@/lib/auth';
+import { authorizationServerMetadata } from '@/lib/discovery';
 import { errorFields, log } from '@/lib/log';
 import { StoredOAuthProvider, mcpFetch, mcpServers } from '@/lib/mcp';
 
@@ -27,12 +28,26 @@ export async function GET(req: NextRequest) {
 
   const authProvider = await StoredOAuthProvider.load(server, url.origin, user);
   const label = server.label ?? server.name;
+
+  // RFC 9207 §2.4: 認可サーバーが iss を付けると宣言しているのに無ければ、受け付けない（mix-up 対策）。
+  // 値の照合は SDK が行うが、iss が無い場合は SDK が照合を省くため、ここで確かめる
+  const iss = url.searchParams.get('iss');
+  const authServer = authProvider.authorizationServerInformation();
+  if (!iss && authServer) {
+    const metadata = (await authorizationServerMetadata(authServer.issuer ?? authServer.authorizationServerUrl)) as {
+      authorization_response_iss_parameter_supported?: boolean;
+    };
+    if (metadata.authorization_response_iss_parameter_supported) {
+      log.warn('mcp_oauth_callback_rejected', { server: server.name, user, error: 'missing_iss' });
+      return new Response('認可レスポンスに iss がありません', { status: 400 });
+    }
+  }
   try {
     await auth(authProvider, {
       serverUrl: server.url,
       authorizationCode: code,
       callbackState: state, // 保存した state との照合は SDK が行う
-      callbackIssuer: url.searchParams.get('iss') ?? undefined,
+      callbackIssuer: iss ?? undefined,
       fetchFn: mcpFetch,
     });
   } catch (error) {

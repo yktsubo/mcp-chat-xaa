@@ -25,7 +25,7 @@ import { getStore } from './store';
 // scope: XAA で要求するスコープ
 // xaa_resource: XAA の ID-JAG の要求に resource（MCP サーバーの識別子）を付ける（仕様上 OPTIONAL。既定は付けない）
 // client_id / client_secret: 事前登録したクライアント（oauth で省略時は CIMD、使えなければ動的クライアント登録）
-export type McpServer = {
+type McpServer = {
   name: string;
   label?: string;
   url: string;
@@ -243,7 +243,7 @@ export const mcpFetch = createMcpFetch();
 const mergeScopes = (...scopes: (string | undefined)[]) =>
   [...new Set(scopes.flatMap((s) => s?.split(/\s+/) ?? []).filter(Boolean))].join(' ');
 
-export type McpUser = { id: string; idToken?: string };
+type McpUser = { id: string; idToken?: string };
 
 /**
  * XAA で MCP サーバーのアクセストークンを得る（期限まではキャッシュを使う）。
@@ -327,7 +327,7 @@ async function connect(server: McpServer, origin: string, user: McpUser, startsA
   }
 }
 
-export type ServerStatus = {
+type ServerStatus = {
   name: string;
   tools?: number;
   /** 認可を始めた URL（接続の操作が必要なとき） */

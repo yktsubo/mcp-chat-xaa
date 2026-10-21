@@ -118,6 +118,19 @@ describe('Authorization Server Discovery（RFC 9728 / RFC 8414）', () => {
     );
   });
 
+  it('[MCP Auth / RFC 8414 §3.1] パスの無い issuer は、oauth-authorization-server → openid-configuration の順に探す', async () => {
+    const root = 'https://as2.example.com';
+    useServers([{ name: 'mcp', url: MCP, client_id: 'app-client', client_secret: 'app-secret', issuer: root }]);
+    fakeMcpServer({ url: MCP, token: 'x', challenge: `Bearer resource_metadata="${PRM}"` });
+    fakeProtectedResourceMetadata(PRM, { resource: MCP, authorization_servers: [root] });
+    route('GET', `${root}/.well-known/oauth-authorization-server`, () => [404, '']);
+    fakeAuthorizationServer({ issuer: root, metadataUrl: `${root}/.well-known/openid-configuration` });
+
+    expect((await startConnect()).origin).toBe(root);
+    const tried = requests.filter((r) => r.url.startsWith(root) && r.method === 'GET').map((r) => r.url);
+    expect(tried.slice(0, 2)).toEqual([`${root}/.well-known/oauth-authorization-server`, `${root}/.well-known/openid-configuration`]);
+  });
+
   it('[失敗][RFC 9728 §3.3] Protected Resource Metadata の resource がこの MCP サーバーでなければ、認可を始めない', async () => {
     fakeMcpServer({ url: MCP, token: 'x', challenge: `Bearer resource_metadata="${PRM}"` });
     fakeProtectedResourceMetadata(PRM, { resource: 'https://other.example.com/mcp', authorization_servers: [ISSUER] });
@@ -240,6 +253,22 @@ describe('Authorization request と callback（OAuth 2.1 / RFC 9207）', () => {
     expect(findRequests('POST', `${ISSUER}/token`)).toHaveLength(0);
   });
 
+  it('[失敗][RFC 9207 §2.4] 認可サーバーが iss を付けると宣言している（authorization_response_iss_parameter_supported）のに、コールバックに iss が無ければ、トークンを要求しない', async () => {
+    standardSetup();
+    const url = await startConnect();
+    const res = await finishCallback({ code: 'auth-code', state: url.searchParams.get('state')! });
+    expect(res.status).toBe(400);
+    expect(findRequests('POST', `${ISSUER}/token`)).toHaveLength(0);
+  });
+
+  it('[RFC 9207 §2.4] 認可サーバーが iss を宣言していなければ、iss の無いコールバックも受け付ける', async () => {
+    standardSetup({ authorization_response_iss_parameter_supported: false });
+    const url = await startConnect();
+    const res = await finishCallback({ code: 'auth-code', state: url.searchParams.get('state')! });
+    expect(res.status).toBe(200);
+    expect(findRequests('POST', `${ISSUER}/token`)).toHaveLength(1);
+  });
+
   it('[失敗][OAuth 2.1 §4.1.2.1] 認可サーバーがエラーを返したら（access_denied など）、トークンを要求しない', async () => {
     standardSetup();
     const url = await startConnect();
@@ -288,6 +317,47 @@ describe('Access Token Usage（RFC 6750 / OAuth 2.1 §5）', () => {
       expect(r.headers.authorization).toBe('Bearer mcp-access-token');
       expect(r.url).not.toContain('mcp-access-token');
     }
+  });
+});
+
+describe('Refresh（OAuth 2.1 §4.3 / RFC 8707）', () => {
+  /** 接続を済ませたあと、MCP サーバーが最初のトークンを期限切れとして拒否する構成にする */
+  async function connectThenExpire(refresh: () => [number, unknown]) {
+    fakeMcpServer({ url: MCP, token: 'refreshed-token', challenge: `Bearer resource_metadata="${PRM}"` });
+    fakeProtectedResourceMetadata(PRM, { resource: MCP, authorization_servers: [ISSUER] });
+    fakeAuthorizationServer({
+      issuer: ISSUER,
+      token: (req) =>
+        req.form.get('grant_type') === 'refresh_token'
+          ? (refresh() as [number, unknown])
+          : [200, { access_token: 'first-token', token_type: 'Bearer', expires_in: 3600, refresh_token: 'rt' }],
+    });
+    const url = await startConnect();
+    await finishCallback({ code: 'auth-code', state: url.searchParams.get('state')!, iss: ISSUER });
+    requests.length = 0;
+  }
+
+  it('[MCP Auth / RFC 8707 §2.2] 拒否されたトークンは、refresh_token とクライアント認証、resource を付けて更新し、新しいトークンで続ける', async () => {
+    await connectThenExpire(() => [200, { access_token: 'refreshed-token', token_type: 'Bearer', expires_in: 3600 }]);
+
+    const mcp = await connectAll(APP, USER);
+    expect(mcp.statuses).toEqual([{ name: 'mcp', tools: 1 }]);
+    await mcp.close();
+
+    const [refresh] = findRequests('POST', `${ISSUER}/token`);
+    expect(refresh.form.get('grant_type')).toBe('refresh_token');
+    expect(refresh.form.get('refresh_token')).toBe('rt');
+    expect(refresh.form.get('resource')).toBe(MCP);
+    expect(refresh.headers.authorization).toBe(`Basic ${Buffer.from('app-client:app-secret').toString('base64')}`);
+    expect((await store.get('mcp:u1:mcp')).tokens).toMatchObject({ access_token: 'refreshed-token' });
+  });
+
+  it('[失敗][RFC 6749 §5.2] 更新が拒否されたら（invalid_grant）、古いトークンを使わず、接続し直しを求める', async () => {
+    await connectThenExpire(() => [400, { error: 'invalid_grant' }]);
+    const mcp = await connectAll(APP, USER);
+    expect(mcp.statuses[0].tools).toBeUndefined();
+    expect(findRequests('POST', `${ISSUER}/token`)[0].form.get('grant_type')).toBe('refresh_token');
+    expect((await store.get('mcp:u1:mcp')).tokens).toBeUndefined();
   });
 });
 
