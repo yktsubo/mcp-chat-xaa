@@ -14,7 +14,7 @@
     "@ai-sdk/azure": "^4.0.107",
     "@ai-sdk/mcp": "^2.0.81",
     "@ai-sdk/react": "^4.0.152",
-    "@modelcontextprotocol/sdk": "^1.32.1",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@streamdown/cjk": "^1.0.4",
     "@streamdown/code": "^2.0.0",
     "@upstash/ratelimit": "^2.2.0",
